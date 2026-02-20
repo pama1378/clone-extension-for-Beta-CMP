@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MC Clone Command Generator</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+  label { display: block; margin-top: 10px; }
+  input, select { width: 100%; padding: 6px; margin-top: 4px; box-sizing: border-box; }
+  button { margin-top: 15px; padding: 10px 20px; font-size: 16px; }
+  textarea { width: 100%; height: 300px; margin-top: 15px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<h2>Minecraft Clone Command Generator</h2>
+
+<label for="mode">Mode:</label>
+<select id="mode">
+  <option value="line">Line</option>
+  <option value="rectangle">Rectangle</option>
+  <option value="circle">Circle</option>
+</select>
+
+<label>Origin1 (x y z):</label>
+<input id="origin1" placeholder="e.g. 0 64 0" value="0 64 0" />
+
+<label>Origin2 (x y z):</label>
+<input id="origin2" placeholder="e.g. 19 69 29" value="19 69 29" />
+
+<label>Target (x y z):</label>
+<input id="target" placeholder="e.g. 100 64 100" value="100 64 100" />
+
+<div id="directionContainer">
+  <label for="direction">Direction (for line mode):</label>
+  <select id="direction">
+    <option value="x+">x+</option>
+    <option value="x-">x-</option>
+    <option value="z+">z+</option>
+    <option value="z-">z-</option>
+  </select>
+</div>
+
+<div id="countXContainer">
+  <label for="countX">Count X (line & rectangle):</label>
+  <input type="number" id="countX" value="3" min="1" />
+</div>
+
+<div id="countZContainer">
+  <label for="countZ">Count Z (rectangle only):</label>
+  <input type="number" id="countZ" value="2" min="1" />
+</div>
+
+<div id="radiusContainer" style="display:none;">
+  <label for="radius">Radius (circle only):</label>
+  <input type="number" id="radius" value="2" min="1" />
+</div>
+
+<label for="gap">Gap (blocks between structures):</label>
+<input type="number" id="gap" value="1" min="0" />
+
+<button id="generateBtn">Generate Clone Commands</button>
+
+<textarea id="output" readonly placeholder="Clone commands will appear here..."></textarea>
+
+<script>
+  const modeSelect = document.getElementById('mode');
+  const directionContainer = document.getElementById('directionContainer');
+  const countXContainer = document.getElementById('countXContainer');
+  const countZContainer = document.getElementById('countZContainer');
+  const radiusContainer = document.getElementById('radiusContainer');
+
+  modeSelect.addEventListener('change', () => {
+    const mode = modeSelect.value;
+    if(mode === 'line') {
+      directionContainer.style.display = 'block';
+      countXContainer.style.display = 'block';
+      countZContainer.style.display = 'none';
+      radiusContainer.style.display = 'none';
+    } else if(mode === 'rectangle') {
+      directionContainer.style.display = 'none';
+      countXContainer.style.display = 'block';
+      countZContainer.style.display = 'block';
+      radiusContainer.style.display = 'none';
+    } else if(mode === 'circle') {
+      directionContainer.style.display = 'none';
+      countXContainer.style.display = 'none';
+      countZContainer.style.display = 'none';
+      radiusContainer.style.display = 'block';
+    }
+  });
+
+  function parseXYZ(str) {
+    const parts = str.trim().split(/\s+/);
+    if(parts.length !== 3) throw new Error('Please input exactly three numbers separated by spaces.');
+    return parts.map(Number);
+  }
+
+  function generateCloneCommands(mode, params) {
+    const [x1,y1,z1] = params.origin1;
+    const [x2,y2,z2] = params.origin2;
+    const [xt,yt,zt] = params.target;
+
+    const minX = Math.min(x1,x2);
+    const maxX = Math.max(x1,x2);
+    const minY = Math.min(y1,y2);
+    const maxY = Math.max(y1,y2);
+    const minZ = Math.min(z1,z2);
+    const maxZ = Math.max(z1,z2);
+
+    const sizeX = maxX - minX + 1;
+    const sizeY = maxY - minY + 1;
+    const sizeZ = maxZ - minZ + 1;
+
+    const gap = params.gap || 0;
+    const commands = [];
+
+    if (mode === "line") {
+      const count = params.countX;
+      for(let i=0; i<count; i++) {
+        let cx = xt, cz = zt;
+        if(params.direction === "x+") cx = xt + i*(sizeX + gap);
+        else if(params.direction === "x-") cx = xt - i*(sizeX + gap);
+        else if(params.direction === "z+") cz = zt + i*(sizeZ + gap);
+        else if(params.direction === "z-") cz = zt - i*(sizeZ + gap);
+        else throw new Error("Invalid direction");
+
+        commands.push(`/clone ${minX} ${minY} ${minZ} ${maxX} ${maxY} ${maxZ} ${cx} ${yt} ${cz}`);
+      }
+    } else if (mode === "rectangle") {
+      const countX = params.countX;
+      const countZ = params.countZ;
+      for(let ix=0; ix<countX; ix++) {
+        for(let iz=0; iz<countZ; iz++) {
+          let cx = xt + ix*(sizeX + gap);
+          let cz = zt + iz*(sizeZ + gap);
+          commands.push(`/clone ${minX} ${minY} ${minZ} ${maxX} ${maxY} ${maxZ} ${cx} ${yt} ${cz}`);
+        }
+      }
+    } else if (mode === "circle") {
+      const r = params.radius;
+      if(r == null) throw new Error("Radius required for circle mode");
+      const stepX = sizeX + 1;
+      const stepZ = sizeZ + 1;
+      const diameter = r * 2;
+      for(let ix = -diameter; ix <= diameter; ix++) {
+        for(let iz = -diameter; iz <= diameter; iz++) {
+          if(Math.sqrt(ix*ix + iz*iz) <= r) {
+            let cx = xt + ix * stepX;
+            let cz = zt + iz * stepZ;
+            commands.push(`/clone ${minX} ${minY} ${minZ} ${maxX} ${maxY} ${maxZ} ${cx} ${yt} ${cz}`);
+          }
+        }
+      }
+    } else {
+      throw new Error("Unknown mode");
+    }
+
+    return commands;
+  }
+
+  document.getElementById('generateBtn').addEventListener('click', () => {
+    const mode = modeSelect.value;
+    const origin1Str = document.getElementById('origin1').value;
+    const origin2Str = document.getElementById('origin2').value;
+    const targetStr = document.getElementById('target').value;
+    const gap = Number(document.getElementById('gap').value);
+
+    try {
+      const origin1 = parseXYZ(origin1Str);
+      const origin2 = parseXYZ(origin2Str);
+      const target = parseXYZ(targetStr);
+
+      const params = { origin1, origin2, target, gap };
+
+      if(mode === "line") {
+        params.direction = document.getElementById('direction').value;
+        params.countX = Number(document.getElementById('countX').value);
+      } else if(mode === "rectangle") {
+        params.countX = Number(document.getElementById('countX').value);
+        params.countZ = Number(document.getElementById('countZ').value);
+      } else if(mode === "circle") {
+        params.radius = Number(document.getElementById('radius').value);
+      }
+
+      const commands = generateCloneCommands(mode, params);
+      document.getElementById('output').value = commands.join('\n');
+    } catch(e) {
+      alert(e.message);
+    }
+  });
+
+  // 初始化界面状态
+  modeSelect.dispatchEvent(new Event('change'));
+</script>
+
+</body>
+</html>
